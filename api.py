@@ -52,7 +52,7 @@ def encode_sse_data(text: str) -> str:
 
 @app.get("/")
 def root():
-    return FileResponse("frontend/index.html")
+    return {"status": "ok", "message": "Project GENESIS API is running"}
 
 
 @app.post("/genesis/research/start")
