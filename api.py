@@ -1,25 +1,27 @@
 """
 Project GENESIS - API Server
-Research Scientist AI Backend
 """
 
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from fastapi.responses import FileResponse, StreamingResponse
-from fastapi.staticfiles import StaticFiles
-from typing import Optional
+import os
 import json
 import time
+from typing import Optional
+
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+
+load_dotenv()
+
 
 from research_engine import (
     run_research_pipeline,
     generate_paper_after_approval,
 )
 
-app = FastAPI(title="Project GENESIS - AI Research Scientist")
-app.mount("/static", StaticFiles(directory="frontend"), name="static")
-app.mount("/public", StaticFiles(directory="public"), name="public")
+app = FastAPI(title="Project GENESIS - API Research Scientist")
 
 app.add_middleware(
     CORSMiddleware,
