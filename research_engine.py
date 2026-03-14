@@ -265,17 +265,57 @@ Be academic but accessible. Show critical thinking. Acknowledge uncertainty.
 
 
 # ============================================================
+# PHASE 3.5: OVERSEER CRITIQUE (Self-Correction)
+# ============================================================
+
+def stream_overseer_critique(user_input: str, detailed_analysis: str):
+    """Stream the secondary Overseer agent's critique of the analysis"""
+    
+    prompt = f"""You are Project GENESIS Overseer, a senior peer-reviewer and critical AI agent.
+
+Research Topic: "{user_input}"
+
+Review the following Draft Analysis produced by the primary research agent:
+{detailed_analysis}
+
+Your goal is to identify WEAKNESSES, MISSING PERSPECTIVES, or LOGICAL LEAPS in the analysis before it gets turned into a full paper structure.
+
+Provide a concise, blunt critique (max 3 short bullet points) of what the analysis missed or where it needs to be strengthened.
+
+Format your response EXACTLY like this:
+
+🛑 **OVERSEER QUALITY CONTROL WARNING**
+- [Critique point 1]
+- [Critique point 2]
+- [Critique point 3]
+"""
+    
+    yield "\n\n---\n\n"
+    yield "👁️ **OVERSEER QUALITY CONTROL INITIALIZED**\n\n"
+    yield "_Scanning analysis for logical gaps and missing perspectives..._\n\n"
+    
+    for chunk in client.models.generate_content_stream(
+        model=MODEL_NAME,
+        contents=prompt,
+    ):
+        if hasattr(chunk, "text") and chunk.text:
+            yield chunk.text
+
+# ============================================================
 # PHASE 4: STRUCTURE PROPOSAL
 # ============================================================
 
-def stream_structure_proposal(user_input: str, analysis_summary: str):
-    """Stream the proposed research paper structure"""
+def stream_structure_proposal(user_input: str, analysis_summary: str, overseer_critique: str):
+    """Stream the proposed research paper structure taking the critique into account"""
     
     prompt = f"""You are Project GENESIS, proposing a formal research paper structure.
 
 Research Topic: "{user_input}"
 
-Based on the completed analysis, propose a complete research paper structure.
+Based on the completed analysis AND the Overseer's critique, propose a complete research paper structure. Ensure you address the Overseer's concerns in your structure.
+
+Overseer Critique:
+{overseer_critique}
 
 Generate the structure EXACTLY in this format:
 
@@ -351,6 +391,48 @@ Make the subsection titles specific to the actual research topic, not generic.
 
 
 # ============================================================
+# PHASE 4.5: STRUCTURE REFINEMENT (Interrogation Chat)
+# ============================================================
+
+def stream_structure_refinement(user_input: str, previous_structure: str, user_feedback: str):
+    """Refine the proposed structure based on user feedback"""
+    
+    prompt = f"""You are Project GENESIS, a responsive AI research scientist.
+
+Research Topic: "{user_input}"
+
+The user has reviewed your proposed research paper structure and provided the following steering feedback:
+"{user_feedback}"
+
+Your Previous Structure:
+{previous_structure}
+
+REVISE the structure specifically addressing the user's feedback.
+Keep the SAME EXACT format as the previous structure:
+
+📄 **PROPOSED RESEARCH PAPER STRUCTURE**
+[Revised Structure]
+
+---
+
+⬇️ **Ready to generate the full research paper?**
+
+Click "✅ Approve & Generate Paper" to proceed, or modify the structure above.
+"""
+    
+    yield "\n\n---\n\n"
+    yield "🔄 **PHASE 4: STRUCTURE PROPOSAL (REFINED)**\n\n"
+    yield f"_Steering research parameters: '{user_feedback}'_\n\n"
+    
+    for chunk in client.models.generate_content_stream(
+        model=MODEL_NAME,
+        contents=prompt,
+    ):
+        if hasattr(chunk, "text") and chunk.text:
+            yield chunk.text
+
+
+# ============================================================
 # PHASE 5: FULL PAPER GENERATION
 # ============================================================
 
@@ -412,7 +494,7 @@ Then proceed with the full paper.
 # MAIN RESEARCH PIPELINE
 # ============================================================
 
-def run_research_pipeline(user_input: str):
+def run_research_pipeline(user_input: str, session: dict):
     """Run the complete research pipeline with streaming"""
     
     # Collect data for memory logging
@@ -428,6 +510,8 @@ def run_research_pipeline(user_input: str):
     # PHASE 1: Web Research
     queries = generate_search_queries(user_input)
     research_data["search_queries"] = queries
+    
+    session["logbook"].append(f"### Generated Search Queries\n" + "\n".join([f"- {q}" for q in queries]) + "\n\n")
     
     yield "🔍 **PHASE 1: WEB RESEARCH**\n\n"
     yield "Generating intelligent search queries...\n\n"
@@ -450,6 +534,8 @@ def run_research_pipeline(user_input: str):
         source_line += f"   - Finding: {source.get('key_finding', 'N/A')}\n\n"
         sources_text += source_line
         yield source_line
+        
+    session["logbook"].append(f"### Gathered Sources\n{sources_text}\n\n")
     
     research_data["phase_completed"] = 1
     yield "\n---\n\n"
@@ -464,6 +550,8 @@ def run_research_pipeline(user_input: str):
         if not chunk.startswith("🤔") and not chunk.startswith("_Engaging"):
             planning_text += chunk
             yield chunk
+            
+    session["logbook"].append(f"### Research Planning (o1 Reasoning)\n{planning_text}\n\n")
     
     research_data["phase_completed"] = 2
     yield "\n\n---\n\n"
@@ -475,17 +563,33 @@ def run_research_pipeline(user_input: str):
         if not chunk.startswith("---") and not chunk.startswith("📊") and not chunk.startswith("_Synth"):
             analysis_text += chunk
         yield chunk
+        
+    session["logbook"].append(f"### Detailed Analysis\n{analysis_text}\n\n")
     
     research_data["phase_completed"] = 3
     yield "\n\n---\n\n"
     yield "✅ Phase 3 Complete\n\n"
     
+    # PHASE 3.5: Overseer Critique
+    overseer_text = ""
+    for chunk in stream_overseer_critique(user_input, analysis_text):
+        if not chunk.startswith("---") and not chunk.startswith("👁️") and not chunk.startswith("_Scann"):
+            overseer_text += chunk
+        yield chunk
+        
+    session["logbook"].append(f"### Overseer Quality Control\n{overseer_text}\n\n")
+    
+    yield "\n\n---\n\n"
+    yield "✅ Quality Control Complete. Refining structure...\n\n"
+    
     # PHASE 4: Structure Proposal
     structure_text = ""
-    for chunk in stream_structure_proposal(user_input, analysis_text):
+    for chunk in stream_structure_proposal(user_input, analysis_text, overseer_text):
         if not chunk.startswith("---") and not chunk.startswith("📄") and not chunk.startswith("_Design"):
             structure_text += chunk
         yield chunk
+        
+    session["logbook"].append(f"### Proposed Structure\n{structure_text}\n\n")
     
     research_data["phase_completed"] = 4
     
@@ -505,8 +609,12 @@ def generate_paper_after_approval(user_input: str, session_data: dict):
     
     structure = session_data.get("structure", "Standard research paper format")
     
+    paper_text = ""
     for chunk in stream_full_paper(user_input, structure, sources_text):
+        paper_text += chunk
         yield chunk
+        
+    session_data["logbook"].append(f"### Final Research Paper\n{paper_text}\n\n")
     
     yield "\n\n---\n\n"
     yield "✅ **Research Paper Complete!**\n\n"
